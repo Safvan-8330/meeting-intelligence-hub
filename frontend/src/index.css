@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #020617; /* Deep Slate 950 */
+  color: #f8fafc; /* Slate 50 */
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
