@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, Calendar, FileText, Sparkles } from 'lucide-react';
 import ChatPanel from '../components/Chat/ChatPanel';
 import SentimentDashboard from '../components/Analytics/SentimentDashboard';
+import SentimentDashboard from '../components/Dashboard/SentimentDashboard';
 
 export default function MeetingDetail() {
   const { filename } = useParams();
@@ -123,7 +124,7 @@ export default function MeetingDetail() {
 
         {/* Middle Row: Sentiment Dashboard Wrapper */}
         <div className="rounded-3xl shadow-2xl border border-slate-800 overflow-hidden bg-slate-900 p-2">
-          <SentimentDashboard sentiment={sentimentData} />
+          <SentimentDashboard filename={filename} />
         </div>
 
         {/* Bottom Row: Action Items Table */}

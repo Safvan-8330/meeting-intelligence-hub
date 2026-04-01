@@ -42,3 +42,35 @@ async def upload_transcripts(files: List[UploadFile] = File(...), db: Session = 
 def get_meeting_history(db: Session = Depends(get_db)):
     meetings = db.query(Meeting).order_by(Meeting.upload_date.desc()).all()
     return meetings
+
+import uuid
+from app.services.transcriber import transcribe_audio_file
+
+@router.post("/live-voice")
+async def handle_live_voice(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # 1. Save the temporary audio file
+    temp_filename = f"live_{uuid.uuid4()}.wav"
+    temp_path = os.path.join(UPLOAD_DIR, temp_filename)
+    
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # 2. Convert Audio to Text
+    transcript_text = transcribe_audio_file(temp_path)
+    
+    if not transcript_text:
+        raise HTTPException(status_code=400, detail="Could not understand audio")
+
+    # 3. Save the transcript as a .txt file so our existing system can use it
+    final_filename = f"Voice_Meeting_{uuid.uuid4().hex[:6]}.txt"
+    final_path = os.path.join(UPLOAD_DIR, final_filename)
+    
+    with open(final_path, "w", encoding="utf-8") as f:
+        f.write(transcript_text)
+        
+    # 4. Log to Database
+    db_meeting = Meeting(filename=final_filename, status="Processed")
+    db.add(db_meeting)
+    db.commit()
+    
+    return {"filename": final_filename, "text": transcript_text}

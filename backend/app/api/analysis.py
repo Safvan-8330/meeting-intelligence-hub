@@ -41,3 +41,43 @@ async def get_analysis(filename: str):
         "filename": filename,
         "analysis": analysis_result
     }
+
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import Meeting
+
+@router.post("/global-query")
+async def global_search(query: ChatQuery, db: Session = Depends(get_db)):
+    # 1. Fetch all processed meetings from the database
+    meetings = db.query(Meeting).all()
+    
+    if not meetings:
+        return {"answer": "No meetings found in the database to search through."}
+
+    # 2. Combine all transcript texts into one big context
+    combined_context = ""
+    for meeting in meetings:
+        path = os.path.join(UPLOAD_DIR, meeting.filename)
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                combined_context += f"\n--- Meeting: {meeting.filename} ---\n"
+                combined_context += f.read()
+
+    # 3. Ask Gemini to find the answer across all files
+    prompt = f"""
+    You are an AI Executive Assistant. You have access to multiple meeting transcripts.
+    Answer the user's question by looking across ALL the provided transcripts.
+    Mention which specific meeting you are referring to in your answer.
+    
+    User Question: {query.question}
+    
+    All Meeting Data:
+    {combined_context}
+    """
+
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt
+    )
+
+    return {"answer": response.text}
