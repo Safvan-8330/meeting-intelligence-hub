@@ -37,11 +37,34 @@ async def upload_transcripts(files: List[UploadFile] = File(...), db: Session = 
         
     return {"message": "Files uploaded and logged to database successfully", "files": saved_files}
 
-# NEW ENDPOINT: Get all past meetings for the dashboard
+# NEW ENDPOINT: Get all past meetings for the dashboard (UPGRADED WITH STATS)
 @router.get("/history")
 def get_meeting_history(db: Session = Depends(get_db)):
     meetings = db.query(Meeting).order_by(Meeting.upload_date.desc()).all()
-    return meetings
+    
+    history_data = []
+    
+    for meeting in meetings:
+        word_count = 0
+        file_path = os.path.join(UPLOAD_DIR, meeting.filename)
+        
+        # Open the file and count the words if it exists
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                text = f.read()
+                word_count = len(text.split()) 
+
+        # Package it up with the new stats
+        history_data.append({
+            "id": meeting.id,
+            "filename": meeting.filename,
+            "upload_date": meeting.upload_date,
+            "status": meeting.status,
+            "word_count": word_count,
+            "action_item_count": meeting.action_item_count 
+        })
+        
+    return history_data
 
 import uuid
 from app.services.transcriber import transcribe_audio_file

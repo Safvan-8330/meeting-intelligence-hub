@@ -9,3 +9,7 @@ class Meeting(Base):
     filename = Column(String, unique=True, index=True)
     upload_date = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="Processed")
+    
+    # --- NEW COLUMNS ---
+    word_count = Column(Integer, default=0)
+    action_item_count = Column(Integer, default=0)

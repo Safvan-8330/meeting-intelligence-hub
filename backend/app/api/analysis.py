@@ -1,9 +1,17 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
 import os
 
+from pydantic import BaseModel
+from dotenv import load_dotenv
+import google.genai as genai
+
 from app.services.reporter import generate_pdf_report
 from app.services.extractor import extract_action_items_and_decisions
+
+# Load Gemini API key for any routes that call the model
+load_dotenv()
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 router = APIRouter()
 UPLOAD_DIR = "uploads"
@@ -45,6 +53,11 @@ async def get_analysis(filename: str):
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Meeting
+
+
+class ChatQuery(BaseModel):
+    question: str
+
 
 @router.post("/global-query")
 async def global_search(query: ChatQuery, db: Session = Depends(get_db)):

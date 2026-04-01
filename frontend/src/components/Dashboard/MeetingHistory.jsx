@@ -64,7 +64,18 @@ export default function MeetingHistory() {
               {meeting.filename}
             </h3>
             
-            <div className="flex items-center justify-between mt-4 relative z-10">
+            {/* --- NEW QUICK STATS SECTION --- */}
+            <div className="flex gap-2 mt-3 mb-2 relative z-10">
+              <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-400 uppercase tracking-wider shadow-inner">
+                {meeting.word_count || 0} Words
+              </span>
+              <span className="inline-flex items-center px-2 py-1 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
+                AI Processed
+              </span>
+            </div>
+            
+            {/* The Date Footer (Updated with a top border for a cleaner look) */}
+            <div className="flex items-center justify-between mt-4 relative z-10 pt-4 border-t border-slate-800/50">
               <div className="flex items-center text-xs text-slate-500 font-medium">
                 <Calendar className="w-3.5 h-3.5 mr-1.5 opacity-70" />
                 {new Date(meeting.upload_date).toLocaleDateString()}
