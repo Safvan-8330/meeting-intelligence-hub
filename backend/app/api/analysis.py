@@ -80,7 +80,9 @@ async def global_search(query: ChatQuery, db: Session = Depends(get_db)):
     prompt = f"""
     You are an AI Executive Assistant. You have access to multiple meeting transcripts.
     Answer the user's question by looking across ALL the provided transcripts.
-    Mention which specific meeting you are referring to in your answer.
+    
+    CRITICAL INSTRUCTION: At the very end of your response, you MUST include a "📍 SOURCES:" section. 
+    List the exact filenames of the specific meetings you used to formulate your answer, and briefly mention what information came from which file. If you didn't use a file, do not list it.
     
     User Question: {query.question}
     
@@ -88,9 +90,37 @@ async def global_search(query: ChatQuery, db: Session = Depends(get_db)):
     {combined_context}
     """
 
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=prompt
-    )
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
 
-    return {"answer": response.text}
+        return {"answer": response.text}
+    except Exception as e:
+        print(f"Gemini global search failed: {e}")
+        # Fallback: simple keyword search across transcripts to provide sources
+        keywords = [w for w in query.question.lower().split() if len(w) > 3][:10]
+        matches = []
+        for meeting in meetings:
+            path = os.path.join(UPLOAD_DIR, meeting.filename)
+            if os.path.exists(path):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        text = f.read().lower()
+                except Exception:
+                    continue
+
+                for kw in keywords:
+                    if kw in text:
+                        idx = text.find(kw)
+                        start = max(0, idx - 60)
+                        end = min(len(text), idx + 140)
+                        excerpt = text[start:end].replace('\n', ' ')
+                        matches.append({"filename": meeting.filename, "excerpt": excerpt})
+                        break
+
+        if not matches:
+            return {"answer": "AI unavailable; no keyword matches found across transcripts.", "sources": []}
+
+        return {"answer": f"AI unavailable; showing {len(matches)} matching meetings (fallback search).", "sources": matches}

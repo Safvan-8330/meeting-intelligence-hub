@@ -1,15 +1,34 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
-import MeetingDetail from './pages/MeetingDetail'; // <-- Import the new page
+import MeetingDetail from './pages/MeetingDetail';
+import About from './pages/About'; 
+import Navbar from './components/Layout/Navbar'; 
+import Footer from './components/Layout/Footer'; 
 
 function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        {/* Add the dynamic route for specific meeting files */}
-        <Route path="/meeting/:filename" element={<MeetingDetail />} />
-      </Routes>
+      {/* This wrapper forces the page to be at least the height of the screen.
+        flex-col and flex-grow push the Footer all the way to the bottom!
+      */}
+      <div className="flex flex-col min-h-screen bg-slate-950">
+        
+        {/* The Navbar sits at the top of every page */}
+        <Navbar /> 
+        
+        {/* The main content area takes up the remaining space */}
+        <main className="flex-grow">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/meeting/:filename" element={<MeetingDetail />} />
+          </Routes>
+        </main>
+        
+        {/* The Footer sits at the bottom of every page */}
+        <Footer />
+        
+      </div>
     </Router>
   );
 }

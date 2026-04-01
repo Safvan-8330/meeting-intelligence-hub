@@ -30,6 +30,9 @@ async def ask_question(query: ChatQuery):
     Use the following transcript to answer the user's question. 
     Keep your answer concise, professional, and directly related to the text.
     
+    CRITICAL INSTRUCTION: At the very end of your answer, you MUST add a section called "📍 SOURCES:". 
+    In this section, list the filename ({query.filename}) and briefly quote the specific sentence or section of the transcript you used to get this answer.
+    
     User Question: {query.question}
     
     Meeting Transcript:

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Calendar, FileText, Sparkles } from 'lucide-react';
+// 1. Added 'Bot' and 'X' to the lucide-react imports
+import { ArrowLeft, CheckCircle2, Calendar, FileText, Sparkles, Bot, X } from 'lucide-react';
 import ChatPanel from '../components/Chat/ChatPanel';
-import SentimentDashboard from '../components/Analytics/SentimentDashboard';
 import SentimentDashboard from '../components/Dashboard/SentimentDashboard';
 
 export default function MeetingDetail() {
@@ -11,6 +11,9 @@ export default function MeetingDetail() {
   const [sentimentData, setSentimentData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // 2. NEW STATE: Track if the chat is open or closed (default to open)
+  const [isChatOpen, setIsChatOpen] = useState(true);
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -39,7 +42,7 @@ export default function MeetingDetail() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="bg-slate-900/80 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-800 flex flex-col items-center">
+        <div className="bg-slate-900/80 backdrop-blur-xl p-8 rounded-2xl shadow-2xl border border-slate-800 flex flex-col items-center">
           <div className="w-12 h-12 border-4 border-slate-700 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
           <p className="text-slate-400 font-semibold tracking-wide">Synthesizing insights...</p>
         </div>
@@ -50,7 +53,7 @@ export default function MeetingDetail() {
   if (error) {
     return (
       <div className="min-h-screen bg-slate-950 p-8 flex items-center justify-center">
-        <div className="bg-slate-900/80 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-red-500/20 max-w-md w-full text-center">
+        <div className="bg-slate-900/80 backdrop-blur-xl p-8 rounded-2xl shadow-2xl border border-red-500/20 max-w-md w-full text-center">
           <p className="text-red-400 font-semibold mb-6">{error}</p>
           <Link to="/" className="inline-flex items-center justify-center px-6 py-3 bg-slate-800 text-white font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700">
             <ArrowLeft className="w-4 h-4 mr-2" /> Return to Dashboard
@@ -61,8 +64,8 @@ export default function MeetingDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6 sm:p-10 selection:bg-indigo-500/30">
-      <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="min-h-screen bg-slate-950 p-6 sm:p-10 selection:bg-indigo-500/30 relative">
+      <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-500">
         
         {/* Navigation */}
         <Link to="/" className="inline-flex items-center px-4 py-2 bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl text-slate-400 hover:text-indigo-400 hover:bg-slate-800 hover:border-slate-700 transition-all font-medium text-sm shadow-sm">
@@ -70,106 +73,147 @@ export default function MeetingDetail() {
         </Link>
         
         {/* Premium Dark Header */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl"></div>
-          <div className="flex items-center relative z-10">
-            <div className="p-4 bg-indigo-500/10 rounded-2xl mr-6 border border-indigo-500/20 shadow-inner">
+          <div className="flex items-center relative z-10 w-full">
+            <div className="p-4 bg-indigo-500/10 rounded-xl mr-6 border border-indigo-500/20 shadow-inner flex-shrink-0">
               <FileText className="w-8 h-8 text-indigo-400" />
             </div>
-            <div className="w-full">
-              <div className="flex items-center gap-3 mb-1 w-full">
-                <h1 className="text-3xl font-extrabold text-white tracking-tight">{filename}</h1>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold tracking-wide uppercase">
-                  <Sparkles className="w-3 h-3 mr-1" /> Analyzed
-                </span>
-                <button 
-                  onClick={() => window.open(`http://localhost:8000/api/analysis/export/${filename}`)}
-                  className="ml-auto inline-flex items-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)]"
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Download PDF Report
-                </button>
-              </div>
-              <p className="text-sm text-slate-400 font-medium">Extracted Decisions, Action Items & Sentiment</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Top Row: Decisions and Chat */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* Key Decisions */}
-          <div className="lg:col-span-5 flex flex-col h-full bg-slate-900 rounded-3xl shadow-2xl border border-slate-800 p-8">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center">
-              <div className="p-2 bg-emerald-500/10 rounded-lg mr-3 text-emerald-400 border border-emerald-500/20">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              Key Decisions
-            </h2>
-            <div className="flex-1 space-y-5">
-              {data.decisions.map((decision, index) => (
-                <div key={index} className="flex items-start bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 transition-colors hover:bg-slate-800">
-                  <div className="w-2.5 h-2.5 mt-1.5 rounded-full bg-emerald-500 mr-4 flex-shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                  <p className="text-slate-300 text-sm leading-relaxed font-medium">{decision}</p>
+            <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <h1 className="text-3xl font-extrabold text-white tracking-tight">{filename}</h1>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold tracking-wide uppercase">
+                    <Sparkles className="w-3 h-3 mr-1" /> Analyzed
+                  </span>
                 </div>
-              ))}
+                <p className="text-sm text-slate-400 font-medium">Extracted Decisions, Action Items & Sentiment</p>
+              </div>
+              
+              <button 
+                onClick={() => window.open(`http://localhost:8000/api/analysis/export/${filename}`)}
+                className="inline-flex items-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] whitespace-nowrap"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Download PDF Report
+              </button>
             </div>
-          </div>
-
-          {/* Chat Panel Wrapper */}
-          <div className="lg:col-span-7 flex flex-col h-full rounded-3xl shadow-2xl border border-slate-800 overflow-hidden bg-slate-900">
-             <ChatPanel filename={filename} />
           </div>
         </div>
 
-        {/* Middle Row: Sentiment Dashboard Wrapper */}
-        <div className="rounded-3xl shadow-2xl border border-slate-800 overflow-hidden bg-slate-900 p-2">
-          <SentimentDashboard filename={filename} />
-        </div>
-
-        {/* Bottom Row: Action Items Table */}
-        <div className="bg-slate-900 rounded-3xl shadow-2xl border border-slate-800 p-8">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center">
-            <div className="p-2 bg-blue-500/10 rounded-lg mr-3 text-blue-400 border border-blue-500/20">
-              <Calendar className="w-5 h-5" />
-            </div>
-            Action Items Tracker
-          </h2>
-          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-800/80 border-b border-slate-700 text-xs uppercase text-slate-400 font-bold tracking-wider">
-                  <th className="p-5 w-1/4">Assignee</th>
-                  <th className="p-5 w-1/2">Task Description</th>
-                  <th className="p-5 w-1/4">Due Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/50">
-                {data.action_items.map((item, index) => (
-                  <tr key={index} className="hover:bg-indigo-500/5 transition-colors group">
-                    <td className="p-5">
-                      <div className="flex items-center font-semibold text-slate-200">
-                        <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center mr-3 text-xs">
-                          {item.who.charAt(0)}
-                        </div>
-                        {item.who}
-                      </div>
-                    </td>
-                    <td className="p-5 text-slate-400 text-sm font-medium">{item.what}</td>
-                    <td className="p-5">
-                      <div className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 group-hover:bg-slate-700 group-hover:border-indigo-500/30 group-hover:text-indigo-300 transition-colors">
-                        <Calendar className="w-3.5 h-3.5 mr-2 opacity-70" />
-                        {item.by_when}
-                      </div>
-                    </td>
-                  </tr>
+        {/* MAIN ENTERPRISE GRID */}
+        <div className="flex flex-col lg:flex-row gap-8 relative">
+          
+          {/* LEFT COLUMN: Data Feed 
+              3. dynamic width: If chat is open, take 2/3. If closed, take full width! */}
+          <div className={`transition-all duration-500 ease-in-out flex flex-col gap-8 ${isChatOpen ? 'w-full lg:w-2/3' : 'w-full max-w-5xl mx-auto'}`}>
+            
+            {/* Key Decisions */}
+            <div className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 p-8">
+              <h2 className="text-xl font-bold text-white mb-6 flex items-center">
+                <div className="p-2 bg-emerald-500/10 rounded-lg mr-3 text-emerald-400 border border-emerald-500/20">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                Key Decisions
+              </h2>
+              <div className="flex-1 space-y-4">
+                {data.decisions.map((decision, index) => (
+                  <div key={index} className="flex items-start bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 transition-colors hover:bg-slate-800">
+                    <div className="w-2.5 h-2.5 mt-1.5 rounded-full bg-emerald-500 mr-4 flex-shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                    <p className="text-slate-300 text-sm leading-relaxed font-medium">{decision}</p>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </div>
+            </div>
 
+            {/* Sentiment Dashboard Wrapper */}
+            <div className="rounded-2xl shadow-2xl border border-slate-800 overflow-hidden bg-slate-900 p-2">
+              <SentimentDashboard filename={filename} />
+            </div>
+
+            {/* Action Items Table */}
+            <div className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 p-8">
+              <h2 className="text-xl font-bold text-white mb-6 flex items-center">
+                <div className="p-2 bg-blue-500/10 rounded-lg mr-3 text-blue-400 border border-blue-500/20">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                Action Items Tracker
+              </h2>
+              <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-800/80 border-b border-slate-700 text-xs uppercase text-slate-400 font-bold tracking-wider">
+                      <th className="p-5 w-1/4">Assignee</th>
+                      <th className="p-5 w-1/2">Task Description</th>
+                      <th className="p-5 w-1/4">Due Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {data.action_items.map((item, index) => (
+                      <tr key={index} className="hover:bg-indigo-500/5 transition-colors group">
+                        <td className="p-5">
+                          <div className="flex items-center font-semibold text-slate-200">
+                            <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center mr-3 text-xs">
+                              {item.who.charAt(0)}
+                            </div>
+                            {item.who}
+                          </div>
+                        </td>
+                        <td className="p-5 text-slate-400 text-sm font-medium">{item.what}</td>
+                        <td className="p-5">
+                          <div className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 group-hover:bg-slate-700 group-hover:border-indigo-500/30 group-hover:text-indigo-300 transition-colors">
+                            <Calendar className="w-3.5 h-3.5 mr-2 opacity-70" />
+                            {item.by_when}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+          {/* 4. RIGHT COLUMN: Chatbot (Only renders if isChatOpen is true) */}
+          {isChatOpen && (
+            <div className="w-full lg:w-1/3 animate-in slide-in-from-right-8 duration-500">
+              <div className="sticky top-8 h-[calc(100vh-4rem)] flex flex-col">
+                <div className="flex-1 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden bg-slate-900 flex flex-col relative">
+                  
+                  {/* Custom Close Button layered on top of the Chat Panel */}
+                  <button 
+                    onClick={() => setIsChatOpen(false)}
+                    className="absolute top-4 right-4 z-50 p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors border border-slate-700 shadow-lg"
+                    title="Minimize Assistant"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+
+                  <ChatPanel filename={filename} />
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
+
+      {/* 5. MINIMIZED FLOATING ROBOT BUTTON (Only renders if isChatOpen is false) */}
+      {!isChatOpen && (
+        <button
+          onClick={() => setIsChatOpen(true)}
+          className="fixed bottom-8 right-8 z-50 p-4 bg-indigo-600 hover:bg-indigo-500 rounded-full shadow-[0_0_25px_rgba(99,102,241,0.5)] text-white transition-all hover:scale-110 animate-in zoom-in group border border-indigo-400/30"
+        >
+          <Bot className="w-7 h-7" />
+          
+          {/* Tooltip on hover */}
+          <span className="absolute -top-12 right-0 bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-slate-700 shadow-xl pointer-events-none">
+            Open AI Assistant
+          </span>
+        </button>
+      )}
+
     </div>
   );
 }
