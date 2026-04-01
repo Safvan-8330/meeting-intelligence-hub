@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import upload, analysis  # <-- Added analysis here
+from app.api import upload, analysis, chat, sentiment  # <-- Added sentiment here
 
 app = FastAPI(title="Meeting Intelligence Hub API")
 
@@ -13,7 +13,9 @@ app.add_middleware(
 )
 
 app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
-app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"]) # <-- Added this line
+app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(sentiment.router, prefix="/api/sentiment", tags=["Sentiment"]) # <-- Added this line
 
 @app.get("/")
 def read_root():
