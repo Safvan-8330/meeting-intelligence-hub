@@ -25,7 +25,7 @@ export default function LiveRecord() {
       formData.append('file', audioBlob, 'recording.wav');
 
       try {
-        const res = await fetch('https://meeting-intelligence-hub-1.onrender.com/api/upload/live-voice', {
+        const res = await fetch('http://localhost:8000/api/upload/live-voice', {
           method: 'POST',
           body: formData,
         });
