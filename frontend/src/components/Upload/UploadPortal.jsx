@@ -54,7 +54,7 @@ export default function UploadPortal() {
     });
 
     try {
-      const response = await fetch('http://localhost:8000/api/upload/', {
+      const response = await fetch('https://meeting-intelligence-hub-1.onrender.com/api/upload/', {
         method: 'POST',
         body: formData,
       });
