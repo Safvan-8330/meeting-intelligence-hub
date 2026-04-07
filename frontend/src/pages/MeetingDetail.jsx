@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-// 1. Added 'Bot' and 'X' to the lucide-react imports
-import { ArrowLeft, CheckCircle2, Calendar, FileText, Sparkles, Bot, X } from 'lucide-react';
+// Added FileSpreadsheet for the CSV icon
+import { ArrowLeft, CheckCircle2, Calendar, FileText, Sparkles, Bot, X, FileSpreadsheet } from 'lucide-react';
 import ChatPanel from '../components/Chat/ChatPanel';
 import SentimentDashboard from '../components/Dashboard/SentimentDashboard';
 
@@ -12,7 +12,6 @@ export default function MeetingDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // 2. NEW STATE: Track if the chat is open or closed (default to open)
   const [isChatOpen, setIsChatOpen] = useState(true);
 
   useEffect(() => {
@@ -90,13 +89,24 @@ export default function MeetingDetail() {
                 <p className="text-sm text-slate-400 font-medium">Extracted Decisions, Action Items & Sentiment</p>
               </div>
               
-              <button 
-                onClick={() => window.open(`http://localhost:8000/api/analysis/export/${filename}`)}
-                className="inline-flex items-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] whitespace-nowrap"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Download PDF Report
-              </button>
+              {/* THE NEW DUAL-EXPORT BUTTONS */}
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => window.open(`http://localhost:8000/api/analysis/export/csv/${filename}`)}
+                  className="inline-flex items-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold rounded-xl transition-all border border-slate-700 shadow-sm whitespace-nowrap"
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-400" />
+                  CSV
+                </button>
+                <button 
+                  onClick={() => window.open(`http://localhost:8000/api/analysis/export/pdf/${filename}`)}
+                  className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] whitespace-nowrap"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  PDF
+                </button>
+              </div>
+
             </div>
           </div>
         </div>
@@ -104,8 +114,7 @@ export default function MeetingDetail() {
         {/* MAIN ENTERPRISE GRID */}
         <div className="flex flex-col lg:flex-row gap-8 relative">
           
-          {/* LEFT COLUMN: Data Feed 
-              3. dynamic width: If chat is open, take 2/3. If closed, take full width! */}
+          {/* LEFT COLUMN: Data Feed */}
           <div className={`transition-all duration-500 ease-in-out flex flex-col gap-8 ${isChatOpen ? 'w-full lg:w-2/3' : 'w-full max-w-5xl mx-auto'}`}>
             
             {/* Key Decisions */}
@@ -175,13 +184,13 @@ export default function MeetingDetail() {
 
           </div>
 
-          {/* 4. RIGHT COLUMN: Chatbot (Only renders if isChatOpen is true) */}
+          {/* RIGHT COLUMN: Chatbot */}
           {isChatOpen && (
             <div className="w-full lg:w-1/3 animate-in slide-in-from-right-8 duration-500">
               <div className="sticky top-8 h-[calc(100vh-4rem)] flex flex-col">
                 <div className="flex-1 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden bg-slate-900 flex flex-col relative">
                   
-                  {/* Custom Close Button layered on top of the Chat Panel */}
+                  {/* Custom Close Button */}
                   <button 
                     onClick={() => setIsChatOpen(false)}
                     className="absolute top-4 right-4 z-50 p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors border border-slate-700 shadow-lg"
@@ -199,7 +208,7 @@ export default function MeetingDetail() {
         </div>
       </div>
 
-      {/* 5. MINIMIZED FLOATING ROBOT BUTTON (Only renders if isChatOpen is false) */}
+      {/* MINIMIZED FLOATING ROBOT BUTTON */}
       {!isChatOpen && (
         <button
           onClick={() => setIsChatOpen(true)}
@@ -207,7 +216,6 @@ export default function MeetingDetail() {
         >
           <Bot className="w-7 h-7" />
           
-          {/* Tooltip on hover */}
           <span className="absolute -top-12 right-0 bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-slate-700 shadow-xl pointer-events-none">
             Open AI Assistant
           </span>

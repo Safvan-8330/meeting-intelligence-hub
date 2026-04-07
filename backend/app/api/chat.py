@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import os
+import time
+import re
+from typing import List
 from google import genai
 from dotenv import load_dotenv
 
@@ -9,7 +12,8 @@ load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 router = APIRouter()
-UPLOAD_DIR = "uploads"
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 
 class ChatQuery(BaseModel):
     filename: str
@@ -39,13 +43,67 @@ async def ask_question(query: ChatQuery):
     {transcript}
     """
 
-    # Use the new SDK syntax and the latest 2.5-flash model
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=prompt
-    )
+    # Try a few times with exponential backoff for transient AI errors
+    max_retries = 3
+    backoff_base = 1.5
+    last_exc = None
 
-    return {
-        "answer": response.text,
-        "citation": "AI Analysis of Transcript"
-    }
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt
+            )
+            # `response.text` is expected to contain the generated content
+            return {
+                "answer": getattr(response, 'text', str(response)),
+                "citation": "AI Analysis of Transcript",
+            }
+        except Exception as e:
+            last_exc = e
+            print(f"❌ Chat AI error (attempt {attempt}): {e}")
+            if attempt < max_retries:
+                sleep_time = backoff_base ** attempt
+                time.sleep(sleep_time)
+
+    # If we reach here, AI calls consistently failed. Provide a graceful fallback.
+    def _extract_sentences(text: str) -> List[str]:
+        # split on sentence boundaries
+        return re.split(r'(?<=[.!?])\s+', text.strip())
+
+    def _keywords_from_question(q: str) -> List[str]:
+        cleaned = re.sub(r"[^a-zA-Z0-9\s]", " ", q).lower()
+        words = [w for w in cleaned.split() if len(w) > 2]
+        return words
+
+    sentences = _extract_sentences(transcript)
+    keywords = _keywords_from_question(query.question)
+
+    matches: List[str] = []
+    if keywords:
+        for s in sentences:
+            sl = s.lower()
+            if any(k in sl for k in keywords):
+                matches.append(s)
+            if len(matches) >= 3:
+                break
+
+    if matches:
+        fallback_answer = (
+            "AI service is currently unavailable. Here are matching transcript snippets that may help:\n\n"
+            + "\n\n".join(matches)
+        )
+    else:
+        # as a last resort, return the first 400 characters of the transcript
+        excerpt = transcript[:400]
+        fallback_answer = (
+            "AI service is currently unavailable and no clear matches were found. "
+            "Here is an excerpt from the transcript:\n\n" + excerpt
+        )
+
+    # Log the original exception for diagnostics and return 503 so frontend can surface retry UX
+    print(f"❌ Chat AI final error after {max_retries} attempts: {last_exc}")
+    raise HTTPException(status_code=503, detail={
+        "message": "AI service currently unavailable. Fallback provided.",
+        "fallback": fallback_answer,
+    })

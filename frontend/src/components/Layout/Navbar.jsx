@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { BrainCircuit } from 'lucide-react'; // <-- Removed Github from here!
 
 // Custom SVG to replace the removed Lucide Github icon
@@ -17,7 +17,33 @@ const GithubIcon = ({ className }) => (
 
 export default function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [profile, setProfile] = useState(null);
   const isActive = (path) => location.pathname === path;
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('profile')
+      if (raw) setProfile(JSON.parse(raw))
+    } catch (e) {
+      // ignore
+    }
+    function onProfileUpdate(e) {
+      try {
+        const u = e?.detail || JSON.parse(localStorage.getItem('profile') || 'null')
+        setProfile(u)
+      } catch (err) {}
+    }
+    window.addEventListener('profile:update', onProfileUpdate)
+    return () => window.removeEventListener('profile:update', onProfileUpdate)
+  }, [])
+
+  function handleSignOut() {
+    localStorage.removeItem('token')
+    localStorage.removeItem('profile')
+    setProfile(null)
+    navigate('/login')
+  }
 
   return (
     <nav className="sticky top-0 z-50 w-full bg-slate-950/80 backdrop-blur-xl border-b border-slate-800 transition-all">
@@ -52,12 +78,26 @@ export default function Navbar() {
             {/* Using the custom icon here! */}
             <GithubIcon className="w-5 h-5" />
           </a>
-          <button className="hidden sm:inline-flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition-all border border-slate-700">
-            Sign In
-          </button>
-          <button className="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-lg transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)]">
-            Get Started
-          </button>
+          {profile ? (
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:inline-flex flex-col text-right mr-2">
+                <span className="text-sm text-white font-semibold">{profile.full_name || profile.user_metadata?.name || profile.email}</span>
+                <span className="text-xs text-slate-400">Signed in</span>
+              </div>
+              <button onClick={handleSignOut} className="inline-flex items-center justify-center px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-all border border-slate-700">
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <>
+              <a href="/profile" className="hidden sm:inline-flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition-all border border-slate-700">
+                Profile
+              </a>
+              <button className="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-lg transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+                Get Started
+              </button>
+            </>
+          )}
         </div>
 
       </div>

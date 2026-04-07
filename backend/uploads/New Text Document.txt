@@ -1,6 +1,0 @@
-Alex: Hi everyone, let's kick off the Q3 planning meeting.
-Sarah: I looked at the budget. The cloud hosting costs are way too high. We need to freeze all new software subscriptions immediately.
-Alex: That makes sense. Let's agree to freeze software subscriptions for the rest of the quarter.
-Sarah: Perfect. Who is going to email the team to let them know?
-Alex: I will write the email and send it out by Friday.
-Sarah: Great, and I will update the budget spreadsheet by tomorrow morning.

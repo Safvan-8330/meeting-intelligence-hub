@@ -1,99 +1,90 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from typing import List
-import os
-import shutil
-from app.database import get_db
-from app.models import Meeting
-
-router = APIRouter()
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-@router.post("/")
-async def upload_transcripts(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
-    saved_files = []
-    
-    for file in files:
-        if not (file.filename.endswith('.txt') or file.filename.endswith('.vtt')):
-            raise HTTPException(status_code=400, detail=f"Unsupported format: {file.filename}")
-            
-        file_path = os.path.join(UPLOAD_DIR, file.filename)
-        
-        # Save file to disk
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # Check if file already exists in database
-        existing_meeting = db.query(Meeting).filter(Meeting.filename == file.filename).first()
-        if not existing_meeting:
-            # Save record to Database
-            db_meeting = Meeting(filename=file.filename, status="Processed")
-            db.add(db_meeting)
-            db.commit()
-            db.refresh(db_meeting)
-            
-        saved_files.append({"filename": file.filename})
-        
-    return {"message": "Files uploaded and logged to database successfully", "files": saved_files}
-
-# NEW ENDPOINT: Get all past meetings for the dashboard (UPGRADED WITH STATS)
-@router.get("/history")
-def get_meeting_history(db: Session = Depends(get_db)):
-    meetings = db.query(Meeting).order_by(Meeting.upload_date.desc()).all()
-    
-    history_data = []
-    
-    for meeting in meetings:
-        word_count = 0
-        file_path = os.path.join(UPLOAD_DIR, meeting.filename)
-        
-        # Open the file and count the words if it exists
-        if os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
-                text = f.read()
-                word_count = len(text.split()) 
-
-        # Package it up with the new stats
-        history_data.append({
-            "id": meeting.id,
-            "filename": meeting.filename,
-            "upload_date": meeting.upload_date,
-            "status": meeting.status,
-            "word_count": word_count,
-            "action_item_count": meeting.action_item_count 
-        })
-        
-    return history_data
-
-import uuid
+import os, shutil, uuid
+from app.database import supabase
+from app.services.extractor import extract_full_intelligence
 from app.services.transcriber import transcribe_audio_file
 
+router = APIRouter()
+# Resolve uploads directory relative to the backend root so file saves/reads work
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
+
+@router.post("/")
+async def upload_transcripts(files: List[UploadFile] = File(...)):
+    for file in files:
+        file_path = os.path.join(UPLOAD_DIR, file.filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # 1. Register meeting in Cloud (BigInt ID)
+        res = supabase.table("meetings").upsert({"filename": file.filename}, on_conflict="filename").execute()
+
+        # Fetch meeting id (ensure we have m_id regardless of AI result)
+        m_row = supabase.table("meetings").select("id").eq("filename", file.filename).single().execute()
+        m_id = m_row.data.get("id") if m_row and m_row.data else None
+        if not m_id:
+            # If we couldn't get an id, skip this file
+            continue
+
+        # 2. Get AI Intelligence
+        ai_data, raw_text = extract_full_intelligence(file_path)
+
+        # 3. SYNC TO SUPABASE TABLES (Removing JSON cache logic)
+        # Transcript (always insert raw transcript even if AI failed)
+        supabase.table("transcripts").insert({"meeting_id": m_id, "raw_text": raw_text}).execute()
+
+        if not ai_data:
+            # AI failed (quota, etc.) — we've recorded the raw transcript; continue without other inserts
+            continue
+
+        # Decisions
+        if ai_data.get('decisions'):
+            dec_list = [{"meeting_id": m_id, "text": d} for d in ai_data['decisions']]
+            supabase.table("decisions").insert(dec_list).execute()
+
+        # Action Items
+        if ai_data.get('action_items'):
+            act_list = [{
+                "meeting_id": m_id, "assignee": a['who'], 
+                "task": a['what'], "due_date": a['by_when']
+            } for a in ai_data['action_items']]
+            supabase.table("action_items").insert(act_list).execute()
+
+        # Sentiments (Speaker & Timeline)
+        sent_list = []
+        for s in ai_data.get('speaker_sentiment', []):
+            sent_list.append({"meeting_id": m_id, "type": "speaker", "label": s['name'], "score": s['score']})
+        for seg in ai_data.get('segment_sentiment', []):
+            sent_list.append({"meeting_id": m_id, "type": "segment", "label": seg['timestamp'], "score": seg['score']})
+        if sent_list:
+            supabase.table("sentiments").insert(sent_list).execute()
+
+        # Participants/Users
+        if ai_data.get('users'):
+            user_list = [{"meeting_id": m_id, "user_name": u} for u in ai_data['users']]
+            supabase.table("meeting_users").insert(user_list).execute()
+
+    return {"message": "Meeting successfully synced to cloud tables."}
+
+@router.get("/history")
+def get_meeting_history():
+    # Use Supabase 'count' feature to show action item numbers in dashboard
+    response = supabase.table("meetings").select("*, action_items(count)").order("created_at", desc=True).execute()
+    return response.data
+
 @router.post("/live-voice")
-async def handle_live_voice(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    # 1. Save the temporary audio file
-    temp_filename = f"live_{uuid.uuid4()}.wav"
-    temp_path = os.path.join(UPLOAD_DIR, temp_filename)
-    
+async def handle_live_voice(file: UploadFile = File(...)):
+    temp_path = os.path.join(UPLOAD_DIR, f"live_{uuid.uuid4()}.wav")
     with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
-    # 2. Convert Audio to Text
-    transcript_text = transcribe_audio_file(temp_path)
-    
-    if not transcript_text:
-        raise HTTPException(status_code=400, detail="Could not understand audio")
+    text = transcribe_audio_file(temp_path)
+    if not text: raise HTTPException(status_code=400, detail="Audio failed")
 
-    # 3. Save the transcript as a .txt file so our existing system can use it
-    final_filename = f"Voice_Meeting_{uuid.uuid4().hex[:6]}.txt"
-    final_path = os.path.join(UPLOAD_DIR, final_filename)
+    # Save Voice as TXT and log to Cloud
+    fname = f"Voice_{uuid.uuid4().hex[:5]}.txt"
+    with open(os.path.join(UPLOAD_DIR, fname), "w") as f: f.write(text)
     
-    with open(final_path, "w", encoding="utf-8") as f:
-        f.write(transcript_text)
-        
-    # 4. Log to Database
-    db_meeting = Meeting(filename=final_filename, status="Processed")
-    db.add(db_meeting)
-    db.commit()
-    
-    return {"filename": final_filename, "text": transcript_text}
+    supabase.table("meetings").insert({"filename": fname}).execute()
+    return {"filename": fname, "text": text}

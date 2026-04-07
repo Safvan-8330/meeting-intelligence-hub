@@ -1,20 +1,11 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+import os
+from dotenv import load_dotenv
+from supabase import create_client, Client
 
-# This creates a local file named 'meetings.db' in your backend folder
-SQLALCHEMY_DATABASE_URL = "sqlite:///./meetings.db"
+load_dotenv()
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+url: str = os.getenv("SUPABASE_URL")
+key: str = os.getenv("SUPABASE_KEY")
 
-Base = declarative_base()
-
-# Dependency to get the database session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# This creates a single, reusable connection to your cloud database
+supabase: Client = create_client(url, key)

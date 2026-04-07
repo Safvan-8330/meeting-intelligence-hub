@@ -8,7 +8,9 @@ load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 router = APIRouter()
-UPLOAD_DIR = "uploads"
+# Resolve uploads directory relative to the backend root so routes work
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 
 @router.get("/{filename}")
 def analyze_sentiment(filename: str):
@@ -74,7 +76,7 @@ def analyze_sentiment(filename: str):
             contents=prompt
         )
         print(f"✅ [SENTIMENT] Google replied successfully!")
-        
+
         result_text = response.text.strip()
         if result_text.startswith("```json"):
             result_text = result_text[7:-3].strip()
@@ -91,4 +93,5 @@ def analyze_sentiment(filename: str):
         
     except Exception as e:
         print(f"❌ Error parsing sentiment (Gemini call failed): {e}")
-        raise HTTPException(status_code=500, detail="Failed to analyze sentiment")
+        # Return 503 to indicate external AI service issues (quota/high load)
+        raise HTTPException(status_code=503, detail="AI service unavailable. Try again later.")
