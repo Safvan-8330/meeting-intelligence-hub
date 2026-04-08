@@ -25,7 +25,7 @@ export default function LiveRecord() {
       formData.append('file', audioBlob, 'recording.wav');
 
       try {
-        const res = await fetch('${import.meta.env.VITE_API_URL}/api/upload/live-voice', {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/upload/live-voice`, {
           method: 'POST',
           body: formData,
         });
