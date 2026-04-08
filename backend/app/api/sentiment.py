@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException
 import os
 import json
-from google import genai
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 router = APIRouter()
 # Resolve uploads directory relative to the backend root so routes work
@@ -70,19 +70,15 @@ def analyze_sentiment(filename: str):
     """
 
     try:
-        print(f"🧠 [SENTIMENT] Sending {filename} to Gemini... please wait.")
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
+        print(f"🧠 [SENTIMENT] Sending {filename} to Groq... please wait.")
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.3-70b-versatile",
+            response_format={"type": "json_object"}
         )
-        print(f"✅ [SENTIMENT] Google replied successfully!")
+        print(f"✅ [SENTIMENT] Groq replied successfully!")
 
-        result_text = response.text.strip()
-        if result_text.startswith("```json"):
-            result_text = result_text[7:-3].strip()
-        elif result_text.startswith("```"):
-            result_text = result_text[3:-3].strip()
-            
+        result_text = response.choices[0].message.content
         parsed_data = json.loads(result_text)
         
         # 3. SAVE THE CACHE
@@ -92,6 +88,5 @@ def analyze_sentiment(filename: str):
         return parsed_data
         
     except Exception as e:
-        print(f"❌ Error parsing sentiment (Gemini call failed): {e}")
-        # Return 503 to indicate external AI service issues (quota/high load)
+        print(f"❌ Error parsing sentiment (Groq call failed): {e}")
         raise HTTPException(status_code=503, detail="AI service unavailable. Try again later.")

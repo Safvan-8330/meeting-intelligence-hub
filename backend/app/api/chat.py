@@ -4,12 +4,12 @@ import os
 import time
 import re
 from typing import List
-from google import genai
+from groq import Groq
 from dotenv import load_dotenv
 
 # Load the API key and initialize the new client
 load_dotenv()
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 router = APIRouter()
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -50,13 +50,13 @@ async def ask_question(query: ChatQuery):
 
     for attempt in range(1, max_retries + 1):
         try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt
+            response = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama-3.3-70b-versatile"
             )
-            # `response.text` is expected to contain the generated content
+            
             return {
-                "answer": getattr(response, 'text', str(response)),
+                "answer": response.choices[0].message.content,
                 "citation": "AI Analysis of Transcript",
             }
         except Exception as e:

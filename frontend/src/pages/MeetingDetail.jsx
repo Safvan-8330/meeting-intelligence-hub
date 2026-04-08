@@ -91,12 +91,13 @@ export default function MeetingDetail() {
               
               {/* THE NEW DUAL-EXPORT BUTTONS */}
               <div className="flex items-center gap-3">
+                {/* Change /export/csv to /export/excel and change the text */}
                 <button 
-                  onClick={() => window.open(`${import.meta.env.VITE_API_URL}/api/analysis/export/csv/${filename}`)}
+                  onClick={() => window.open(`${import.meta.env.VITE_API_URL}/api/analysis/export/excel/${filename}`)}
                   className="inline-flex items-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold rounded-xl transition-all border border-slate-700 shadow-sm whitespace-nowrap"
                 >
                   <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-400" />
-                  CSV
+                  Excel
                 </button>
                 <button 
                   onClick={() => window.open(`${import.meta.env.VITE_API_URL}/api/analysis/export/pdf/${filename}`)}
@@ -163,16 +164,16 @@ export default function MeetingDetail() {
                         <td className="p-5">
                           <div className="flex items-center font-semibold text-slate-200">
                             <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center mr-3 text-xs">
-                              {item.who.charAt(0)}
+                              {(item.who || item.assignee || '?').charAt(0)}
                             </div>
-                            {item.who}
+                            {item.who || item.assignee || 'Unassigned'}
                           </div>
                         </td>
-                        <td className="p-5 text-slate-400 text-sm font-medium">{item.what}</td>
+                        <td className="p-5 text-slate-400 text-sm font-medium">{item.what || item.task || item.description || 'No description provided'}</td>
                         <td className="p-5">
                           <div className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 group-hover:bg-slate-700 group-hover:border-indigo-500/30 group-hover:text-indigo-300 transition-colors">
                             <Calendar className="w-3.5 h-3.5 mr-2 opacity-70" />
-                            {item.by_when}
+                            {item.by_when || item.due_date || item.deadline || 'TBD'}
                           </div>
                         </td>
                       </tr>

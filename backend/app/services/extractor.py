@@ -1,17 +1,17 @@
 import os
 import json
-from google import genai
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 def extract_full_intelligence(file_path: str):
     """Analyzes transcript and returns structured data for Supabase."""
     with open(file_path, 'r', encoding='utf-8') as f:
         transcript_content = f.read()
     
-    # We ask Gemini for everything in one structured JSON
+    # We ask Groq for everything in one structured JSON
     prompt = f"""
     Analyze this meeting transcript and return a JSON object with:
     1. "decisions": [list of strings]
@@ -25,14 +25,33 @@ def extract_full_intelligence(file_path: str):
     """
 
     try:
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=prompt,
-            config={'response_mime_type': 'application/json'}
+        print("🧠 [EXTRACTOR] Sending to Groq...")
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.3-70b-versatile",
+            response_format={"type": "json_object"}
         )
-        # Parse the JSON response directly
-        ai_data = json.loads(response.text)
+        
+        result_text = response.choices[0].message.content
+        
+        # Groq JSON mode is good, but sometimes adds markdown. Let's strip it just in case.
+        if result_text.startswith("```json"):
+            result_text = result_text[7:-3].strip()
+        elif result_text.startswith("```"):
+            result_text = result_text[3:-3].strip()
+            
+        ai_data = json.loads(result_text)
+        
+        # 🔥 ADD THIS TO DEBUG 🔥
+        print("✅ [EXTRACTOR] Groq returned this data:")
+        print(json.dumps(ai_data, indent=2))
+        
+        # Safety check to ensure keys exist
+        if "decisions" not in ai_data: ai_data["decisions"] = []
+        if "action_items" not in ai_data: ai_data["action_items"] = []
+        
         return ai_data, transcript_content
+        
     except Exception as e:
-        print(f"❌ AI Extraction Error: {e}")
+        print(f"❌ Groq Extraction Error: {e}")
         return None, transcript_content

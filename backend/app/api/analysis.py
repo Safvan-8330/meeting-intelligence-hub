@@ -3,6 +3,8 @@ from fastapi.responses import StreamingResponse
 import os, io, csv, textwrap, json
 from datetime import datetime
 from fpdf import FPDF
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 from app.database import supabase
 from pydantic import BaseModel
 from app.services.extractor import extract_full_intelligence
@@ -13,13 +15,12 @@ UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 
 router = APIRouter()
 
-
 def safe_split_text(text, width=85):
     if not text:
         return []
+    # Strip non-ASCII to prevent PDF crashes
     clean = str(text).encode('ascii', 'ignore').decode('ascii')
     return textwrap.wrap(clean, width=width)
-
 
 @router.get("/full-report/{filename}")
 async def get_full_report(filename: str):
@@ -59,230 +60,210 @@ async def get_full_report(filename: str):
     }
 
 
-@router.get("/export/csv/{filename}")
-async def export_csv(filename: str):
-    cache_path = os.path.join(UPLOAD_DIR, f"{filename}_analysis.json")
-    if not os.path.exists(cache_path):
-        raise HTTPException(status_code=404, detail="Analysis cache not found.")
-        
-    with open(cache_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+@router.get("/export/excel/{filename}")
+async def export_excel(filename: str):
+    try:
+        data = await get_full_report(filename)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Meeting data not found in database.")
 
-    # --- AUTO-REPAIR: Extract missing data from the uploaded TXT file ---
-    if not data.get('participants') or not data.get('speaker_sentiment'):
-        txt_path = os.path.join(UPLOAD_DIR, filename)
-        if os.path.exists(txt_path):
-            ai_data, _ = extract_full_intelligence(txt_path)
-            if ai_data:
-                data['participants'] = ai_data.get('users', [])
-                data['speaker_sentiment'] = ai_data.get('speaker_sentiment', [])
-                # Update cache so it's instant next time
-                with open(cache_path, 'w', encoding='utf-8') as cache_file:
-                    json.dump(data, cache_file, ensure_ascii=False, indent=2)
+    wb = Workbook()
+    
+    # --- SHEET 1: TASKS & DECISIONS ---
+    ws1 = wb.active
+    ws1.title = "Tasks and Decisions"
+    header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid") # Indigo
+    header_font = Font(color="FFFFFF", bold=True)
+    wrap_alignment = Alignment(wrap_text=True, vertical="top")
+    center_alignment = Alignment(horizontal="center", vertical="top")
 
-    # Build a flat CSV with the requested columns
-    meeting_name = filename
+    headers1 = ["Item Type", "Assignee", "Description / Task", "Due Date"]
+    ws1.append(headers1)
+
+    for cell in ws1[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_alignment
+
+    # SET COLUMN WIDTHS
+    ws1.column_dimensions['A'].width = 15
+    ws1.column_dimensions['B'].width = 20
+    ws1.column_dimensions['C'].width = 60
+    ws1.column_dimensions['D'].width = 15
+
     decisions = data.get('decisions', [])
     action_items = data.get('action_items', [])
-    speaker_sentiment = data.get('speaker_sentiment', [])
 
-    # Map speaker sentiment by lowercase name -> score/label
-    sentiment_map = {}
-    for s in speaker_sentiment:
-        name = (s.get('label') or s.get('name') or '').strip()
-        if name:
-            sentiment_map[name.lower()] = s.get('score')
-
-    output = io.StringIO()
-    # quoting=csv.QUOTE_ALL to fix long text formatting in Excel
-    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-
-    # Header
-    writer.writerow(["Meeting_Name", "Type", "Assignee", "Description", "Due_Date", "Speaker_Sentiment"])
-
-    # Decisions as rows
     for d in decisions:
-        writer.writerow([meeting_name, "Decision", "", d or "", "", ""])
+        ws1.append(["Decision", "-", d or "", "-"])
 
-    # Action items as rows
     for a in action_items:
         assignee = (a.get('assignee') or a.get('who') or '').strip()
         desc = (a.get('task') or a.get('what') or '').strip()
-        due = (a.get('due_date') or a.get('by_when') or '')
-        sentiment_score = ''
-        if assignee:
-            score = sentiment_map.get(assignee.lower())
-            if score is not None:
-                # Translate numeric score to label
-                if score >= 0.2:
-                    sentiment_score = 'Positive'
-                elif score <= -0.2:
-                    sentiment_score = 'Negative'
-                else:
-                    sentiment_score = 'Neutral'
+        due = (a.get('due_date') or a.get('by_when') or 'TBD')
+        ws1.append(["Action Item", assignee, desc, due])
 
-        writer.writerow([meeting_name, "Action Item", assignee, desc, due or "", sentiment_score])
+    for row in ws1.iter_rows(min_row=2, max_row=ws1.max_row, min_col=1, max_col=4):
+        row[2].alignment = wrap_alignment
+        row[0].alignment = center_alignment
+        row[3].alignment = center_alignment
 
+    # --- SHEET 2: PARTICIPANTS & SENTIMENT ---
+    ws2 = wb.create_sheet(title="Sentiment Analysis")
+    headers2 = ["Name/Participant", "Sentiment Label", "Score (-1 to 1)"]
+    ws2.append(headers2)
+    for cell in ws2[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_alignment
+
+    speaker_sentiment = data.get('speaker_sentiment', [])
+    for s in speaker_sentiment:
+        score = s.get('score', 0)
+        label = "Positive" if score >= 0.2 else "Negative" if score <= -0.2 else "Neutral"
+        ws2.append([s.get('label') or s.get('name') or 'Unknown', label, score])
+
+    ws2.column_dimensions['A'].width = 30
+    ws2.column_dimensions['B'].width = 20
+    ws2.column_dimensions['C'].width = 20
+
+    output = io.BytesIO()
+    wb.save(output)
     output.seek(0)
-    csv_text = output.getvalue()
-    # Prepend UTF-8 BOM so Excel on Windows recognizes UTF-8 correctly
-    bom_prefixed = '\ufeff' + csv_text
-    csv_bytes = bom_prefixed.encode('utf-8')
+
+    clean_filename = filename.replace(".txt", "")
     headers = {
-        'Content-Disposition': f'attachment; filename="{filename}.csv"'
+        'Content-Disposition': f'attachment; filename="{clean_filename}_Report.xlsx"'
     }
-    return StreamingResponse(io.BytesIO(csv_bytes), media_type='text/csv', headers=headers)
+    return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
 
 
 @router.get("/export/pdf/{filename}")
 async def export_pdf(filename: str):
-    cache_path = os.path.join(UPLOAD_DIR, f"{filename}_analysis.json")
-    if not os.path.exists(cache_path):
-        raise HTTPException(status_code=404, detail="Analysis cache not found.")
-        
-    with open(cache_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
-    # --- AUTO-REPAIR: Extract missing data from the uploaded TXT file ---
-    if not data.get('participants') or not data.get('speaker_sentiment'):
-        txt_path = os.path.join(UPLOAD_DIR, filename)
-        if os.path.exists(txt_path):
-            ai_data, _ = extract_full_intelligence(txt_path)
-            if ai_data:
-                data['participants'] = ai_data.get('users', [])
-                data['speaker_sentiment'] = ai_data.get('speaker_sentiment', [])
-                # Update cache so it's instant next time
-                with open(cache_path, 'w', encoding='utf-8') as cache_file:
-                    json.dump(data, cache_file, ensure_ascii=False, indent=2)
-
-    # Prepare metadata
-    decisions = data.get('decisions', [])
-    action_items = data.get('action_items', [])
-    participants = data.get('participants', [])
-    speaker_sentiment = data.get('speaker_sentiment', [])
-
-    # Compute vibe summary from speaker_sentiment
-    avg_score = None
-    scores = [s.get('score') for s in speaker_sentiment if isinstance(s.get('score'), (int, float))]
-    if scores:
-        avg_score = sum(scores) / len(scores)
-    if avg_score is None:
-        vibe = 'No sentiment data'
-    elif avg_score >= 0.2:
-        vibe = 'Overall Sentiment: Positive'
-    elif avg_score <= -0.2:
-        vibe = 'Overall Sentiment: Negative'
-    else:
-        vibe = 'Overall Sentiment: Neutral'
+    try:
+        data = await get_full_report(filename)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Meeting data not found in database.")
 
     pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    # Header / Metadata
-    pdf.set_font("Helvetica", style="B", size=16)
-    pdf.cell(0, 10, f"{filename}", ln=True, align="L")
-    pdf.set_font("Helvetica", size=10)
-    pdf.cell(0, 6, f"Processed: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", ln=True)
-    pdf.ln(4)
+    # --- YOUR ORIGINAL PROFESSIONAL HEADER BLOCK ---
+    pdf.set_fill_color(30, 41, 59) # Slate 800
+    pdf.rect(0, 0, 210, 45, 'F')
     
-    # Participants
-    pdf.set_font("Helvetica", style="B", size=11)
-    pdf.cell(0, 6, "Participants:", ln=True)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", style="B", size=24)
+    pdf.set_xy(15, 12)
+    pdf.cell(0, 10, "Meeting Intelligence Brief", ln=True)
+    
     pdf.set_font("Helvetica", size=10)
+    pdf.set_xy(15, 24)
+    pdf.cell(0, 10, f"Source File: {filename}", ln=True)
+    pdf.set_xy(15, 30)
+    pdf.cell(0, 10, f"Generated: {datetime.utcnow().strftime('%B %d, %Y at %H:%M UTC')}", ln=True)
+
+    # --- RESET COLORS FOR BODY ---
+    pdf.set_y(55)
+    pdf.set_text_color(30, 41, 59)
+
+    def draw_section_header(title):
+        pdf.ln(5)
+        pdf.set_font("Helvetica", style="B", size=14)
+        pdf.set_text_color(79, 70, 229) # Indigo 600
+        pdf.cell(0, 10, title, ln=True)
+        # Draw a subtle line under the header
+        pdf.set_draw_color(226, 232, 240)
+        pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+        pdf.ln(4)
+        pdf.set_text_color(51, 65, 85) # Slate 700
+        pdf.set_font("Helvetica", size=11)
+
+    # --- PARTICIPANTS ---
+    participants = data.get('participants', [])
+    draw_section_header("Meeting Participants")
     if participants:
-        pdf.multi_cell(0, 6, ", ".join(participants))
+        pdf.multi_cell(0, 6, " * " + "\n * ".join(participants))
     else:
-        pdf.cell(0, 6, "(none)", ln=True)
+        pdf.cell(0, 6, "No participants identified.", ln=True)
 
-    pdf.ln(6)
-
-    # Vibe / Executive summary
-    pdf.set_font("Helvetica", style="B", size=12)
-    pdf.cell(0, 8, "Vibe Check", ln=True)
-    pdf.set_font("Helvetica", size=11)
-    pdf.multi_cell(0, 6, vibe)
-
-    pdf.ln(4)
-
-    # Detailed Speaker Sentiment Breakdown
-    pdf.set_font("Helvetica", style="B", size=11)
-    pdf.cell(0, 6, "Speaker Sentiment Breakdown:", ln=True)
-    pdf.set_font("Helvetica", size=10)
-    if speaker_sentiment:
-        for s in speaker_sentiment:
+    # --- NEW: SENTIMENT ANALYSIS (ADDED HERE) ---
+    draw_section_header("Sentiment Analysis")
+    speaker_sent = data.get('speaker_sentiment', [])
+    if speaker_sent:
+        for s in speaker_sent:
             name = s.get('label') or s.get('name') or 'Unknown'
-            score = s.get('score')
-            if score is None:
-                lbl = "Neutral"
-            elif score >= 0.2:
-                lbl = "Positive"
-            elif score <= -0.2:
-                lbl = "Negative"
-            else:
-                lbl = "Neutral"
-            
+            score = s.get('score', 0)
+            vibe = "Positive" if score >= 0.1 else "Negative" if score <= -0.1 else "Neutral"
             score_txt = f"{score:.2f}" if isinstance(score, (int, float)) else "N/A"
-            for line in safe_split_text(f"* {name} - {lbl} (Score: {score_txt})"):
-                pdf.cell(0, 6, line, ln=True)
+            pdf.cell(0, 7, f"* {name}: {vibe} (Score: {score_txt})", ln=True)
     else:
-        pdf.cell(0, 6, "(none recorded)", ln=True)
+        pdf.cell(0, 7, "No sentiment data available.", ln=True)
 
-    pdf.ln(6)
-
-    # Key Decisions
-    pdf.set_font("Helvetica", style="B", size=12)
-    pdf.cell(0, 8, "Key Decisions", ln=True)
-    pdf.set_font("Helvetica", size=11)
+    # --- KEY DECISIONS ---
+    decisions = data.get('decisions', [])
+    draw_section_header("Key Decisions")
     if decisions:
         for d in decisions:
-            for line in safe_split_text(f"- {d}", width=100):
+            pdf.set_x(15)
+            for line in safe_split_text(f"+  {d}", width=95):
                 pdf.cell(0, 6, line, ln=True)
-            pdf.ln(1)
-    else:
-        pdf.cell(0, 6, "No recorded decisions.", ln=True)
-
-    pdf.ln(6)
-
-    # Action Items (Tracker)
-    pdf.set_font("Helvetica", style="B", size=12)
-    pdf.cell(0, 8, "Action Items", ln=True)
-    pdf.set_font("Helvetica", size=11)
-    if action_items:
-        for a in action_items:
-            assignee = a.get('assignee') or a.get('who') or ''
-            task = a.get('task') or a.get('what') or ''
-            due = a.get('due_date') or a.get('by_when') or ''
-
-            # Bold the assignee
-            if assignee:
-                pdf.set_font("Helvetica", style="B", size=11)
-                pdf.cell(0, 6, f"{assignee}", ln=True)
-                pdf.set_font("Helvetica", size=11)
-                pdf.multi_cell(0, 6, f"- {task} (Due: {due or 'TBD'})")
-            else:
-                pdf.multi_cell(0, 6, f"- {task} (Due: {due or 'TBD'})")
             pdf.ln(2)
     else:
-        pdf.cell(0, 6, "No action items.", ln=True)
+        pdf.cell(0, 6, "No formal decisions recorded.", ln=True)
 
-    # Return PDF bytes
+    # --- ACTION ITEMS ---
+    action_items = data.get('action_items', [])
+    draw_section_header("Action Items Tracker")
+    
+    if action_items:
+        for a in action_items:
+            assignee = a.get('assignee') or a.get('who') or 'Unassigned'
+            task = a.get('task') or a.get('what') or 'No description'
+            due = a.get('due_date') or a.get('by_when') or 'TBD'
+
+            # Draw a clean "Card" layout
+            pdf.set_font("Helvetica", style="B", size=11)
+            pdf.set_text_color(15, 23, 42)
+            pdf.cell(25, 6, f"Assignee: ", ln=False)
+            pdf.set_font("Helvetica", size=11)
+            pdf.cell(0, 6, assignee, ln=True)
+            
+            pdf.set_font("Helvetica", style="B", size=11)
+            pdf.cell(25, 6, f"Due Date: ", ln=False)
+            pdf.set_font("Helvetica", size=11)
+            pdf.set_text_color(225, 29, 72) # Rose red
+            pdf.cell(0, 6, due, ln=True)
+            
+            pdf.set_text_color(51, 65, 85)
+            for line in safe_split_text(f"Task: {task}", width=90):
+                pdf.cell(0, 6, line, ln=True)
+            pdf.ln(4)
+    else:
+        pdf.cell(0, 6, "No action items recorded.", ln=True)
+
+    # --- FULL TRANSCRIPT ---
+    pdf.add_page()
+    draw_section_header("Full Meeting Transcript")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(100, 116, 139) # Lighter gray
+    transcript = data.get('transcript', 'No transcript available.')
+    pdf.multi_cell(0, 5, transcript)
+
     return StreamingResponse(io.BytesIO(pdf.output()), media_type="application/pdf")
 
 
 @router.get("/{filename}")
 async def get_analysis(filename: str):
-    """Return cached analysis JSON if available, otherwise build from cloud data or transcript file."""
     file_path = os.path.join(UPLOAD_DIR, filename)
     cache_path = os.path.join(UPLOAD_DIR, f"{filename}_analysis.json")
 
-    # 1) If cached analysis exists, return it
     if os.path.exists(cache_path):
         with open(cache_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return {"analysis": data}
 
-    # 2) Try building from Supabase tables
     try:
         data = await get_full_report(filename)
         analysis = {
@@ -295,42 +276,32 @@ async def get_analysis(filename: str):
         }
         return {"analysis": analysis}
     except HTTPException:
-        # 3) Fallback: if a raw transcript file exists locally, return minimal analysis
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as f:
                 txt = f.read()
             return {"analysis": {"transcript": txt, "decisions": [], "action_items": [], "participants": []}}
         raise
 
-
 @router.post('/sync/{filename}')
 async def sync_analysis(filename: str):
-    """Run AI analysis for `filename`, save a cached analysis file, and sync results
-    into Supabase tables. This endpoint is idempotent: it clears existing rows for the
-    meeting and replaces them with the latest analysis.
-    """
     file_path = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail='Transcript file not found')
 
-    # Ensure meeting row exists
     try:
         supabase.table('meetings').upsert({'filename': filename}, on_conflict='filename').execute()
     except Exception as e:
         print(f"⚠️ Could not upsert meeting: {e}")
 
-    # Fetch meeting id
     res = supabase.table('meetings').select('id').eq('filename', filename).execute()
     if not res or not getattr(res, 'data', None):
         raise HTTPException(status_code=500, detail='Failed to resolve meeting id')
     m_id = res.data[0]['id']
 
-    # Run the AI extractor
     ai_data, raw_text = extract_full_intelligence(file_path)
     if not ai_data:
         raise HTTPException(status_code=503, detail='AI analysis failed; try again later')
 
-    # Build canonical analysis object and cache to file
     analysis = {
         'transcript': raw_text,
         'decisions': ai_data.get('decisions', []),
@@ -346,16 +317,14 @@ async def sync_analysis(filename: str):
     except Exception as e:
         print(f"⚠️ Failed to write analysis cache: {e}")
 
-    # Clear existing rows for this meeting to avoid duplicates
     for table in ('decisions', 'action_items', 'sentiments', 'meeting_users'):
         try:
             supabase.table(table).delete().eq('meeting_id', m_id).execute()
         except Exception:
             pass
 
-    # Insert fresh data
     try:
-        supabase.table('transcripts').insert({'meeting_id': m_id, 'raw_text': raw_text}).execute()
+        supabase.table('transcripts').upsert({'meeting_id': m_id, 'raw_text': raw_text}).execute()
 
         if analysis['decisions']:
             dec_list = [{'meeting_id': m_id, 'text': d} for d in analysis['decisions']]
@@ -394,13 +363,11 @@ async def sync_analysis(filename: str):
 class ChatQuery(BaseModel):
     question: str
 
-
 @router.post("/global-query")
 async def global_search(query: ChatQuery):
     res = supabase.table("transcripts").select("raw_text, meetings(filename)").execute()
     context = ""
     for r in (res.data or []):
-        # some rows may not have meetings relation
         meeting_fn = r.get('meetings', {}).get('filename') if r.get('meetings') else None
         context += f"\nFile: {meeting_fn or 'unknown'}\n{r.get('raw_text', '')}"
 
