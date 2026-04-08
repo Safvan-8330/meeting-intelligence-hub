@@ -4,8 +4,12 @@ from supabase import create_client, Client
 
 load_dotenv()
 
-url: str = os.getenv("SUPABASE_URL")
-key: str = os.getenv("SUPABASE_KEY")
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_KEY")
 
-# This creates a single, reusable connection to your cloud database
-supabase: Client = create_client(url, key)
+# Makes deployment safe: It won't crash the server if Render is missing the keys
+if url and key:
+    supabase: Client = create_client(url, key)
+else:
+    print("⚠️ WARNING: Supabase credentials not found in environment!")
+    supabase = None
