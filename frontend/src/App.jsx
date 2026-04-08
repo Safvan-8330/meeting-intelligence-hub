@@ -13,7 +13,7 @@ function App() {
       const token = localStorage.getItem('token')
       if (!token) return
       try {
-        const res = await fetch('`${import.meta.env.VITE_API_URL}`/api/auth/me', {
+        const res = await fetch('${import.meta.env.VITE_API_URL}/api/auth/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         })
         if (!res.ok) return

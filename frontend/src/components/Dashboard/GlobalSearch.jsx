@@ -12,7 +12,7 @@ export default function GlobalSearch() {
     setLoading(true);
 
     try {
-      const response = await fetch('`${import.meta.env.VITE_API_URL}`/api/analysis/global-query', {
+      const response = await fetch('${import.meta.env.VITE_API_URL}/api/analysis/global-query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: "all", question: query })

@@ -18,8 +18,8 @@ export default function MeetingDetail() {
     const fetchAllData = async () => {
       try {
         const [analysisRes, sentimentRes] = await Promise.all([
-          fetch(``${import.meta.env.VITE_API_URL}`/api/analysis/${filename}`),
-          fetch(``${import.meta.env.VITE_API_URL}`/api/sentiment/${filename}`)
+          fetch(`${import.meta.env.VITE_API_URL}/api/analysis/${filename}`),
+          fetch(`${import.meta.env.VITE_API_URL}/api/sentiment/${filename}`)
         ]);
 
         if (!analysisRes.ok || !sentimentRes.ok) throw new Error('Could not load all meeting data.');
@@ -92,14 +92,14 @@ export default function MeetingDetail() {
               {/* THE NEW DUAL-EXPORT BUTTONS */}
               <div className="flex items-center gap-3">
                 <button 
-                  onClick={() => window.open(``${import.meta.env.VITE_API_URL}`/api/analysis/export/csv/${filename}`)}
+                  onClick={() => window.open(`${import.meta.env.VITE_API_URL}/api/analysis/export/csv/${filename}`)}
                   className="inline-flex items-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold rounded-xl transition-all border border-slate-700 shadow-sm whitespace-nowrap"
                 >
                   <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-400" />
                   CSV
                 </button>
                 <button 
-                  onClick={() => window.open(``${import.meta.env.VITE_API_URL}`/api/analysis/export/pdf/${filename}`)}
+                  onClick={() => window.open(`${import.meta.env.VITE_API_URL}/api/analysis/export/pdf/${filename}`)}
                   className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] whitespace-nowrap"
                 >
                   <FileText className="w-4 h-4 mr-2" />

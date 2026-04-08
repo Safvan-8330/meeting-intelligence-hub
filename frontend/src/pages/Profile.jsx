@@ -27,7 +27,7 @@ export default function Profile() {
     setMsg(null)
     const token = localStorage.getItem('token')
     try {
-      const res = await fetch('`${import.meta.env.VITE_API_URL}`/api/auth/profile', {
+      const res = await fetch('${import.meta.env.VITE_API_URL}/api/auth/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ full_name: fullName })
