@@ -9,7 +9,7 @@ export default function SentimentDashboard({ filename }) {
   useEffect(() => {
     const fetchSentiment = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/sentiment/${filename}`);
+        const response = await fetch(``${import.meta.env.VITE_API_URL}`/api/sentiment/${filename}`);
         if (response.ok) {
           const result = await response.json();
           setData(result);

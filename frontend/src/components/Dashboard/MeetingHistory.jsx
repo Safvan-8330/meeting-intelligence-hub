@@ -10,7 +10,7 @@ export default function MeetingHistory() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/upload/history');
+        const response = await fetch('`${import.meta.env.VITE_API_URL}`/api/upload/history');
         if (response.ok) {
           const data = await response.json();
           setHistory(data);
