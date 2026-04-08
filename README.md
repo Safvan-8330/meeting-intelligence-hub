@@ -21,11 +21,5 @@ The Meeting Intelligence Hub is an AI-powered full-stack application that transf
 Before you begin, ensure you have the following installed on your machine:
 * **Node.js** (v16 or higher)
 * **Python** (v3.8 or higher)
-* **FFmpeg** (Required for live audio processing. Ensure it is added to your system's PATH)
 * A **Supabase** account with a configured database project
 * A **Google Gemini API** key
-
-### 1. Backend Setup (FastAPI)
-Open your terminal and navigate to the backend directory:
-```bash
-cd backend
