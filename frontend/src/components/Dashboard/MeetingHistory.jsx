@@ -1,31 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Calendar, ChevronRight, History, CheckCircle2 } from 'lucide-react';
+import { supabase } from "../../lib/supabase"; // 👈 Ensure this path is correct for your project
 
 export default function MeetingHistory() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch the history from the SQLite database when the component loads
-  useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/upload/history`);
-        if (response.ok) {
-          const data = await response.json();
-          setHistory(data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch history:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchHistory = async () => {
+    try {
+      // 1. Grab the session token from Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
+      // If no token, we can't fetch protected history
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      // 2. Attach the token to the GET request
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/upload/history`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Backend returns {"history": [...]} based on our previous setup
+        setHistory(data.history || data); 
+      }
+    } catch (error) {
+      console.error("Failed to fetch history:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchHistory();
   }, []);
 
-  // If loading or no history, don't show anything yet
   if (loading || history.length === 0) return null;
 
   return (
@@ -47,7 +65,6 @@ export default function MeetingHistory() {
             to={`/meeting/${meeting.filename}`}
             className="group block bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl hover:bg-slate-800/80 hover:border-indigo-500/30 hover:shadow-[0_0_20px_rgba(99,102,241,0.1)] transition-all duration-300 relative overflow-hidden"
           >
-            {/* Subtle glow effect on hover */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/0 group-hover:bg-indigo-500/5 rounded-full blur-2xl transition-all duration-500"></div>
             
             <div className="flex items-start justify-between mb-4 relative z-10">
@@ -56,7 +73,7 @@ export default function MeetingHistory() {
               </div>
               <div className="flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <CheckCircle2 className="w-3 h-3 mr-1" />
-                {meeting.status}
+                {meeting.status || 'Analyzed'}
               </div>
             </div>
 
@@ -64,7 +81,6 @@ export default function MeetingHistory() {
               {meeting.filename}
             </h3>
             
-            {/* --- NEW QUICK STATS SECTION --- */}
             <div className="flex gap-2 mt-3 mb-2 relative z-10">
               <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-400 uppercase tracking-wider shadow-inner">
                 {meeting.word_count || 0} Words
@@ -74,7 +90,6 @@ export default function MeetingHistory() {
               </span>
             </div>
             
-            {/* The Date Footer (Updated with a top border for a cleaner look) */}
             <div className="flex items-center justify-between mt-4 relative z-10 pt-4 border-t border-slate-800/50">
               <div className="flex items-center text-xs text-slate-500 font-medium">
                 <Calendar className="w-3.5 h-3.5 mr-1.5 opacity-70" />

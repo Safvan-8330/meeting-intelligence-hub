@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from multiprocessing import context
+
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 import os, io, csv, textwrap, json
 from datetime import datetime
@@ -8,6 +10,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from app.database import supabase
 from pydantic import BaseModel
 from app.services.extractor import extract_full_intelligence
+from app.auth import verify_user # 👈 IMPORT THE BOUNCER
 
 # Resolve uploads directory relative to the backend root so routes work
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -22,12 +25,13 @@ def safe_split_text(text, width=85):
     clean = str(text).encode('ascii', 'ignore').decode('ascii')
     return textwrap.wrap(clean, width=width)
 
+# 🔒 SECURED: Full Report Data
 @router.get("/full-report/{filename}")
-async def get_full_report(filename: str):
-    # Fetch all data from cloud tables
-    res = supabase.table("meetings").select("id").eq("filename", filename).execute()
+async def get_full_report(filename: str, user_id: str = Depends(verify_user)):
+    # 👇 Added .eq("user_id", user_id) so users can only fetch their own meeting data
+    res = supabase.table("meetings").select("id").eq("filename", filename).eq("user_id", user_id).execute()
     if not res.data:
-        raise HTTPException(status_code=404, detail="Meeting not found")
+        raise HTTPException(status_code=404, detail="Meeting not found or access denied")
     m_id = res.data[0]['id']
 
     decisions = supabase.table("decisions").select("text").eq("meeting_id", m_id).execute()
@@ -59,11 +63,11 @@ async def get_full_report(filename: str):
         "segment_sentiment": [s for s in sentiments_list if s.get('type') == 'segment']
     }
 
-
+# 🔒 SECURED: Excel Export
 @router.get("/export/excel/{filename}")
-async def export_excel(filename: str):
+async def export_excel(filename: str, user_id: str = Depends(verify_user)):
     try:
-        data = await get_full_report(filename)
+        data = await get_full_report(filename, user_id) # Pass user_id down
     except Exception:
         raise HTTPException(status_code=404, detail="Meeting data not found in database.")
 
@@ -85,7 +89,6 @@ async def export_excel(filename: str):
         cell.font = header_font
         cell.alignment = center_alignment
 
-    # SET COLUMN WIDTHS
     ws1.column_dimensions['A'].width = 15
     ws1.column_dimensions['B'].width = 20
     ws1.column_dimensions['C'].width = 60
@@ -137,11 +140,11 @@ async def export_excel(filename: str):
     }
     return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
 
-
+# 🔒 SECURED: PDF Export
 @router.get("/export/pdf/{filename}")
-async def export_pdf(filename: str):
+async def export_pdf(filename: str, user_id: str = Depends(verify_user)):
     try:
-        data = await get_full_report(filename)
+        data = await get_full_report(filename, user_id) # Pass user_id down
     except Exception:
         raise HTTPException(status_code=404, detail="Meeting data not found in database.")
 
@@ -149,8 +152,8 @@ async def export_pdf(filename: str):
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    # --- YOUR ORIGINAL PROFESSIONAL HEADER BLOCK ---
-    pdf.set_fill_color(30, 41, 59) # Slate 800
+    # --- HEADER BLOCK ---
+    pdf.set_fill_color(30, 41, 59)
     pdf.rect(0, 0, 210, 45, 'F')
     
     pdf.set_text_color(255, 255, 255)
@@ -164,23 +167,21 @@ async def export_pdf(filename: str):
     pdf.set_xy(15, 30)
     pdf.cell(0, 10, f"Generated: {datetime.utcnow().strftime('%B %d, %Y at %H:%M UTC')}", ln=True)
 
-    # --- RESET COLORS FOR BODY ---
+    # --- RESET COLORS ---
     pdf.set_y(55)
     pdf.set_text_color(30, 41, 59)
 
     def draw_section_header(title):
         pdf.ln(5)
         pdf.set_font("Helvetica", style="B", size=14)
-        pdf.set_text_color(79, 70, 229) # Indigo 600
+        pdf.set_text_color(79, 70, 229)
         pdf.cell(0, 10, title, ln=True)
-        # Draw a subtle line under the header
         pdf.set_draw_color(226, 232, 240)
         pdf.line(15, pdf.get_y(), 195, pdf.get_y())
         pdf.ln(4)
-        pdf.set_text_color(51, 65, 85) # Slate 700
+        pdf.set_text_color(51, 65, 85)
         pdf.set_font("Helvetica", size=11)
 
-    # --- PARTICIPANTS ---
     participants = data.get('participants', [])
     draw_section_header("Meeting Participants")
     if participants:
@@ -188,7 +189,6 @@ async def export_pdf(filename: str):
     else:
         pdf.cell(0, 6, "No participants identified.", ln=True)
 
-    # --- NEW: SENTIMENT ANALYSIS (ADDED HERE) ---
     draw_section_header("Sentiment Analysis")
     speaker_sent = data.get('speaker_sentiment', [])
     if speaker_sent:
@@ -201,7 +201,6 @@ async def export_pdf(filename: str):
     else:
         pdf.cell(0, 7, "No sentiment data available.", ln=True)
 
-    # --- KEY DECISIONS ---
     decisions = data.get('decisions', [])
     draw_section_header("Key Decisions")
     if decisions:
@@ -213,7 +212,6 @@ async def export_pdf(filename: str):
     else:
         pdf.cell(0, 6, "No formal decisions recorded.", ln=True)
 
-    # --- ACTION ITEMS ---
     action_items = data.get('action_items', [])
     draw_section_header("Action Items Tracker")
     
@@ -223,7 +221,6 @@ async def export_pdf(filename: str):
             task = a.get('task') or a.get('what') or 'No description'
             due = a.get('due_date') or a.get('by_when') or 'TBD'
 
-            # Draw a clean "Card" layout
             pdf.set_font("Helvetica", style="B", size=11)
             pdf.set_text_color(15, 23, 42)
             pdf.cell(25, 6, f"Assignee: ", ln=False)
@@ -233,7 +230,7 @@ async def export_pdf(filename: str):
             pdf.set_font("Helvetica", style="B", size=11)
             pdf.cell(25, 6, f"Due Date: ", ln=False)
             pdf.set_font("Helvetica", size=11)
-            pdf.set_text_color(225, 29, 72) # Rose red
+            pdf.set_text_color(225, 29, 72)
             pdf.cell(0, 6, due, ln=True)
             
             pdf.set_text_color(51, 65, 85)
@@ -243,19 +240,23 @@ async def export_pdf(filename: str):
     else:
         pdf.cell(0, 6, "No action items recorded.", ln=True)
 
-    # --- FULL TRANSCRIPT ---
     pdf.add_page()
     draw_section_header("Full Meeting Transcript")
     pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(100, 116, 139) # Lighter gray
+    pdf.set_text_color(100, 116, 139)
     transcript = data.get('transcript', 'No transcript available.')
     pdf.multi_cell(0, 5, transcript)
 
     return StreamingResponse(io.BytesIO(pdf.output()), media_type="application/pdf")
 
-
+# 🔒 SECURED: Fetch Single Analysis
 @router.get("/{filename}")
-async def get_analysis(filename: str):
+async def get_analysis(filename: str, user_id: str = Depends(verify_user)):
+    # 👇 Security check before touching the cache!
+    res = supabase.table("meetings").select("id").eq("filename", filename).eq("user_id", user_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=403, detail="Access denied or meeting not found.")
+
     file_path = os.path.join(UPLOAD_DIR, filename)
     cache_path = os.path.join(UPLOAD_DIR, f"{filename}_analysis.json")
 
@@ -265,7 +266,7 @@ async def get_analysis(filename: str):
         return {"analysis": data}
 
     try:
-        data = await get_full_report(filename)
+        data = await get_full_report(filename, user_id)
         analysis = {
             "transcript": data.get("transcript", ""),
             "decisions": data.get("decisions", []),
@@ -282,14 +283,16 @@ async def get_analysis(filename: str):
             return {"analysis": {"transcript": txt, "decisions": [], "action_items": [], "participants": []}}
         raise
 
+# 🔒 SECURED: Manual Sync
 @router.post('/sync/{filename}')
-async def sync_analysis(filename: str):
+async def sync_analysis(filename: str, user_id: str = Depends(verify_user)):
     file_path = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail='Transcript file not found')
 
     try:
-        supabase.table('meetings').upsert({'filename': filename}, on_conflict='filename').execute()
+        # 👇 Tell Supabase this file belongs to user_id during upsert
+        supabase.table('meetings').upsert({'filename': filename, 'user_id': user_id}, on_conflict='filename').execute()
     except Exception as e:
         print(f"⚠️ Could not upsert meeting: {e}")
 
@@ -359,16 +362,84 @@ async def sync_analysis(filename: str):
 
     return {'result': 'ok', 'analysis': analysis}
 
-
 class ChatQuery(BaseModel):
-    question: str
+    query: str  # 👈 Change this to 'query' to match the frontend JS
+    filename: str = "all"
 
+# 🔒 SECURED: God Mode Global Search
 @router.post("/global-query")
-async def global_search(query: ChatQuery):
-    res = supabase.table("transcripts").select("raw_text, meetings(filename)").execute()
-    context = ""
-    for r in (res.data or []):
-        meeting_fn = r.get('meetings', {}).get('filename') if r.get('meetings') else None
-        context += f"\nFile: {meeting_fn or 'unknown'}\n{r.get('raw_text', '')}"
+async def global_search(query: ChatQuery, user_id: str = Depends(verify_user)):
+    try:
+        # 1. Only get IDs for meetings OWNED by this user
+        meetings_res = supabase.table("meetings").select("id, filename").eq("user_id", user_id).execute()
+        
+        if not meetings_res.data:
+            return {"answer": "I couldn't find any meetings in your account to search through."}
+        
+        # Create a list of valid IDs to filter the other tables
+        meeting_ids = [m['id'] for m in meetings_res.data]
+        meetings_map = {m['id']: m['filename'] for m in meetings_res.data}
+        
+        # 2. Setup context object
+        context_data = {m_id: {"filename": fname, "transcript": "", "actions": [], "decisions": []} 
+                        for m_id, fname in meetings_map.items()}
 
-    return {"answer": "Search results based on cloud data"}
+        # 3. SECURE FETCH: Only pull data belonging to the filtered meeting_ids
+        # This prevents pulling the entire database into memory
+        trans_res = supabase.table("transcripts").select("meeting_id, raw_text").in_("meeting_id", meeting_ids).execute()
+        actions_res = supabase.table("action_items").select("meeting_id, assignee, task, due_date").in_("meeting_id", meeting_ids).execute()
+        decisions_res = supabase.table("decisions").select("meeting_id, text").in_("meeting_id", meeting_ids).execute()
+
+        # 4. Map the data to the correct meetings
+        for t in (trans_res.data or []):
+            context_data[t['meeting_id']]['transcript'] += t.get('raw_text', '') + "\n"
+        
+        for a in (actions_res.data or []):
+            assignee = a.get('assignee') or 'Unassigned'
+            task = a.get('task') or ''
+            due = a.get('due_date') or 'TBD'
+            context_data[a['meeting_id']]['actions'].append(f"{assignee} needs to: {task} (Due: {due})")
+
+        for d in (decisions_res.data or []):
+            context_data[d['meeting_id']]['decisions'].append(d.get('text', ''))
+
+        # 5. Build the text context for the AI
+        context = ""
+        for m_id, data in context_data.items():
+            context += f"\n========================\n"
+            context += f"MEETING: {data['filename']}\n"
+            context += f"========================\n"
+            
+            if data['decisions']:
+                context += "► KEY DECISIONS MADE:\n" + "\n".join([f"  - {d}" for d in data['decisions']]) + "\n\n"
+            
+            if data['actions']:
+                context += "► ACTION ITEMS ASSIGNED:\n" + "\n".join([f"  - {a}" for a in data['actions']]) + "\n\n"
+                
+            context += "► RAW TRANSCRIPT:\n" + data['transcript'] + "\n"
+
+        system_prompt = (
+            "You are an elite Meeting Intelligence Assistant. Use the provided Action Items, "
+            "Decisions, and transcripts to answer accurately. Mention filenames when referring to specific meetings."
+        )
+        
+        # Note: Ensure your ChatQuery model has a 'query' or 'question' field that matches your frontend!
+        # Change query.question to query.query
+        user_prompt = f"Context from all meetings:\n{context}\n\nUser Question: {query.query}"
+
+        from app.services.extractor import client 
+        
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.1 
+        )
+        
+        return {"answer": response.choices[0].message.content}
+
+    except Exception as e:
+        print(f"❌ Global Search Error: {e}")
+        return {"answer": "Sorry, I ran into an error while searching across your meetings."}

@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, FileText, AlertCircle, X, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from '../../lib/supabase'; // 👈 1. ADDED SUPABASE IMPORT
 
 export default function UploadPortal() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -54,12 +55,24 @@ export default function UploadPortal() {
     });
 
     try {
+      // 👈 2. GRAB THE SECURE TOKEN
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      // 👈 DIAGNOSTIC LOG: Check if the token exists!
+      console.log("My Token is:", token);
+
+      // 👈 3. ATTACH IT TO THE FETCH HEADERS
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/upload/`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}` // The Magic Key!
+          // Note: DO NOT put 'Content-Type' here when sending formData!
+        },
         body: formData,
       });
 
-      if (!response.ok) throw new Error('Upload failed. Is the server running?');
+      if (!response.ok) throw new Error('Upload failed. Is the server running or unauthorized?');
 
       if (uploadedFiles.length > 0) {
         setLastProcessedFile(uploadedFiles[0].name);

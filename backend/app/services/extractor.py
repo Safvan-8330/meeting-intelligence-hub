@@ -11,14 +11,13 @@ def extract_full_intelligence(file_path: str):
     with open(file_path, 'r', encoding='utf-8') as f:
         transcript_content = f.read()
     
-    # We ask Groq for everything in one structured JSON
     prompt = f"""
     Analyze this meeting transcript and return a JSON object with:
     1. "decisions": [list of strings]
     2. "action_items": [{{ "who": "name", "what": "task", "by_when": "date" }}]
     3. "speaker_sentiment": [{{ "name": "name", "score": float (-1.0 to 1.0) }}]
     4. "segment_sentiment": [{{ "timestamp": "MM:SS", "score": float (-1.0 to 1.0) }}]
-    5. "users": [list of strings of unique participants]
+    5. "users": [list of strings of unique participants mentioned or speaking]
 
     Transcript:
     {transcript_content}
@@ -34,7 +33,7 @@ def extract_full_intelligence(file_path: str):
         
         result_text = response.choices[0].message.content
         
-        # Groq JSON mode is good, but sometimes adds markdown. Let's strip it just in case.
+        # Clean markdown if present
         if result_text.startswith("```json"):
             result_text = result_text[7:-3].strip()
         elif result_text.startswith("```"):
@@ -42,13 +41,12 @@ def extract_full_intelligence(file_path: str):
             
         ai_data = json.loads(result_text)
         
-        # 🔥 ADD THIS TO DEBUG 🔥
-        print("✅ [EXTRACTOR] Groq returned this data:")
-        print(json.dumps(ai_data, indent=2))
+        print("✅ [EXTRACTOR] Groq returned data successfully.")
         
-        # Safety check to ensure keys exist
-        if "decisions" not in ai_data: ai_data["decisions"] = []
-        if "action_items" not in ai_data: ai_data["action_items"] = []
+        # Safety normalization
+        ai_data["decisions"] = ai_data.get("decisions", [])
+        ai_data["action_items"] = ai_data.get("action_items", [])
+        ai_data["users"] = ai_data.get("users", []) # 👈 Ensure users key exists
         
         return ai_data, transcript_content
         

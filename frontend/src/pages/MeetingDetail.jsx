@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-// Added FileSpreadsheet for the CSV icon
 import { ArrowLeft, CheckCircle2, Calendar, FileText, Sparkles, Bot, X, FileSpreadsheet } from 'lucide-react';
+import { supabase } from '../lib/supabase'; // 👈 1. IMPORT SUPABASE
 import ChatPanel from '../components/Chat/ChatPanel';
 import SentimentDashboard from '../components/Dashboard/SentimentDashboard';
 
@@ -14,15 +14,22 @@ export default function MeetingDetail() {
   
   const [isChatOpen, setIsChatOpen] = useState(true);
 
+  // --- 🔒 SECURED INITIAL DATA FETCH ---
   useEffect(() => {
     const fetchAllData = async () => {
       try {
+        // Grab the token
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const headers = { 'Authorization': `Bearer ${token}` };
+
         const [analysisRes, sentimentRes] = await Promise.all([
-          fetch(`${import.meta.env.VITE_API_URL}/api/analysis/${filename}`),
-          fetch(`${import.meta.env.VITE_API_URL}/api/sentiment/${filename}`)
+          // Attach the token to both fetches
+          fetch(`${import.meta.env.VITE_API_URL}/api/analysis/${filename}`, { headers }),
+          fetch(`${import.meta.env.VITE_API_URL}/api/sentiment/${filename}`, { headers })
         ]);
 
-        if (!analysisRes.ok || !sentimentRes.ok) throw new Error('Could not load all meeting data.');
+        if (!analysisRes.ok || !sentimentRes.ok) throw new Error('Could not load all meeting data. It may be secured or missing.');
 
         const analysisResult = await analysisRes.json();
         const sentimentResult = await sentimentRes.json();
@@ -37,6 +44,37 @@ export default function MeetingDetail() {
     };
     fetchAllData();
   }, [filename]);
+
+  // --- 🔒 SECURED FILE DOWNLOAD HANDLER ---
+  const handleSecureExport = async (type) => {
+    try {
+      // 1. Grab the token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      // 2. Fetch the file data securely
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/analysis/export/${type}/${filename}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error("Export failed or unauthorized");
+
+      // 3. Convert response to a Blob and trigger a fake click to download it
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${filename.replace('.txt', '')}_Report.${type === 'excel' ? 'xlsx' : 'pdf'}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download error:", error);
+      alert("Failed to download the file safely.");
+    }
+  };
 
   if (loading) {
     return (
@@ -89,18 +127,17 @@ export default function MeetingDetail() {
                 <p className="text-sm text-slate-400 font-medium">Extracted Decisions, Action Items & Sentiment</p>
               </div>
               
-              {/* THE NEW DUAL-EXPORT BUTTONS */}
+              {/* SECURED EXPORT BUTTONS */}
               <div className="flex items-center gap-3">
-                {/* Change /export/csv to /export/excel and change the text */}
                 <button 
-                  onClick={() => window.open(`${import.meta.env.VITE_API_URL}/api/analysis/export/excel/${filename}`)}
+                  onClick={() => handleSecureExport('excel')} // 👈 Updated to use secure helper
                   className="inline-flex items-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold rounded-xl transition-all border border-slate-700 shadow-sm whitespace-nowrap"
                 >
                   <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-400" />
                   Excel
                 </button>
                 <button 
-                  onClick={() => window.open(`${import.meta.env.VITE_API_URL}/api/analysis/export/pdf/${filename}`)}
+                  onClick={() => handleSecureExport('pdf')} // 👈 Updated to use secure helper
                   className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] whitespace-nowrap"
                 >
                   <FileText className="w-4 h-4 mr-2" />

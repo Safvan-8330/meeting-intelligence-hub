@@ -1,55 +1,79 @@
-import React, { useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useState, useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { supabase } from './lib/supabase';
+
 import Home from './pages/Home';
 import MeetingDetail from './pages/MeetingDetail';
 import About from './pages/About'; 
 import Profile from './pages/Profile';
+import Login from './pages/Login'; 
 import Navbar from './components/Layout/Navbar'; 
 import Footer from './components/Layout/Footer';
 
 function App() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    async function refreshProfile() {
-      const token = localStorage.getItem('token')
-      if (!token) return
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        if (!res.ok) return
-        const j = await res.json()
-        const user = j.user || j
-        localStorage.setItem('profile', JSON.stringify(user))
-        try { window.dispatchEvent(new CustomEvent('profile:update', { detail: user })) } catch (e) {}
-      } catch (e) {
-        // ignore
-      }
-    }
-    refreshProfile()
-  }, [])
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <Router>
-      {/* This wrapper forces the page to be at least the height of the screen.
-        flex-col and flex-grow push the Footer all the way to the bottom!
-      */}
       <div className="flex flex-col min-h-screen bg-slate-950">
         
-        {/* The Navbar sits at the top of every page */}
-        <Navbar /> 
+        {/* Only show Navbar/Footer if logged in */}
+        {session && <Navbar session={session} />} 
         
-        {/* The main content area takes up the remaining space */}
         <main className="flex-grow">
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/meeting/:filename" element={<MeetingDetail />} />
+            {/* 1. PUBLIC ROUTE: Login */}
+            <Route 
+              path="/login" 
+              element={!session ? <Login onLogin={(s) => setSession(s)} /> : <Navigate to="/" />} 
+            />
+
+            {/* 2. PROTECTED ROUTES: Redirect to login if no session */}
+            <Route 
+              path="/" 
+              element={session ? <Home /> : <Navigate to="/login" />} 
+            />
+            <Route 
+              path="/about" 
+              element={session ? <About /> : <Navigate to="/login" />} 
+            />
+            <Route 
+              path="/profile" 
+              element={session ? <Profile session={session} /> : <Navigate to="/login" />} 
+            />
+            <Route 
+              path="/meeting/:filename" 
+              element={session ? <MeetingDetail /> : <Navigate to="/login" />} 
+            />
+
+            {/* 3. CATCH-ALL: Redirect unknown paths */}
+            <Route path="*" element={<Navigate to={session ? "/" : "/login"} />} />
           </Routes>
         </main>
         
-        {/* The Footer sits at the bottom of every page */}
-        <Footer />
+        {session && <Footer />}
         
       </div>
     </Router>

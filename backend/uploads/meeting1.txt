@@ -1,0 +1,11 @@
+[00:00:00] Alice (Project Manager): Alright, let's get started. Thanks everyone for joining the weekly sync. Let's look at the progress for the current sprint. Bob, how are the new frontend components coming along?
+
+[00:00:12] Bob (Frontend Developer): They are going well. I've finished the UI for the dashboard and the user profile page. However, I am currently blocked waiting on the backend API endpoints to fetch the user data.
+
+[00:00:25] Charlie (Backend Engineer): Ah, sorry about that. I'm working on those endpoints right now. The database schema migration took a bit longer than expected to optimize, but the APIs should be deployed to the staging environment by tomorrow morning.
+
+[00:00:40] Alice (Project Manager): That sounds like a solid plan. Bob, will you be able to connect the UI and test the integration by Thursday if Charlie gets that to you tomorrow?
+
+[00:00:48] Bob (Frontend Developer): Yes, absolutely. That gives me plenty of time. 
+
+[00:00:52] Alice (Project Manager): Great. Let's touch base on this again during tomorrow's standup. Moving on to the next agenda item...
