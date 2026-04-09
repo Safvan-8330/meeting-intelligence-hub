@@ -10,7 +10,7 @@ app = FastAPI(title="Meeting Intelligence Hub")
 origins = [
     "http://localhost:5173",                     # Local Development
     "http://localhost:3000",                     # Alternative Local Port
-    "https://your-project-name.vercel.app",      # 👈 REPLACE with your actual Vercel URL
+    "https://meeting-intelligence-hub-mu.vercel.app",      # 👈 REPLACE with your actual Vercel URL
 ]
 
 app.add_middleware(
